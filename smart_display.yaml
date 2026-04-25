@@ -1,0 +1,325 @@
+esphome:
+  name: display
+  friendly_name: "Smart Display"
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: ""
+
+ota:
+  - platform: esphome
+    password: ""
+
+wifi:
+  ssid: "Andromeda-IoT"
+  password: "0V3pqv1fl0Mr"
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Display Fallback Hotspot"
+    password: ""
+
+captive_portal:
+
+number:
+  - platform: template
+    name: "Duration Offset"
+    id: duration_offset
+    optimistic: True
+    min_value: 0
+    max_value: 2000
+    internal: True
+    step: 1
+  - platform: template
+    name: "Screen Text Offset"
+    id: screen_text_offset
+    optimistic: True
+    min_value: 0
+    max_value: 2000
+    internal: True
+    step: 1
+
+time:
+  - platform: sntp
+    id: ha_time
+    servers:
+      - pool.ntp.org
+    on_time:
+      - seconds: /1
+        then:
+          - if:
+              condition:
+                and:
+                  - binary_sensor.is_on: spotify_playing
+                  - binary_sensor.is_on: display_on
+              then:
+                - number.increment: duration_offset
+      - seconds: /1
+        then:
+          - if:
+              condition:
+                and:
+                  - binary_sensor.is_on: spotify_playing
+                  - binary_sensor.is_on: display_on
+              then:
+                - number.increment: duration_offset
+
+font:
+  - file: "gfonts://Courier+Prime"
+    id: Courier_Prime
+    size: 33
+  - file: "gfonts://Courier+Prime"
+    id: Courier_Prime_11
+    size: 11
+  - file: "gfonts://Courier+Prime"
+    id: Courier_Prime_14
+    size: 14
+  - file: "gfonts://Courier+Prime"
+    id: Courier_Prime_16
+    size: 16
+  - file: "gfonts://Courier+Prime"
+    id: Courier_Prime_8
+    size: 8
+  - file: "gfonts://Courier+Prime"
+    id: Courier_Prime_6
+    size: 6
+  - file: "gfonts://Roboto"
+    id: Roboto
+    size: 14
+  - file: "gfonts://Roboto"
+    id: Roboto_7
+    size: 7
+  - file: "gfonts://Roboto"
+    id: Roboto_9
+    size: 9
+  
+sensor:
+  - platform: homeassistant
+    id: outdoor_temp
+    entity_id: weather.forecast_home
+    attribute: temperature
+    name: "Outside Temperature"
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+    internal: True
+  - platform: homeassistant
+    id: track_pos
+    entity_id: media_player.spotify_james
+    attribute: media_position
+    name: "Track Pos"
+    on_value: 
+      then:
+        - number.set:
+            id: duration_offset
+            value: 0
+    internal: True
+  - platform: homeassistant
+    id: track_duration
+    entity_id: media_player.spotify_james
+    attribute: media_duration
+    name: "Track Duration"
+    internal: True
+
+binary_sensor:
+  - platform: template
+    id: spotify_playing
+    name: "Spotify Playing"
+    internal: True
+    lambda: !lambda |-
+      if (id(spotify_state_raw).state == "playing") {
+        return true;
+      } else {
+        return false;
+      }
+  - platform: template
+    id: display_on
+    name: "Display On"
+    internal: True
+    lambda: !lambda |-
+      if (id(display_on_switch).state) {
+        if(id(display_select).state == "Clock") {
+          id(main_display).show_page(id(clock_time));
+        } else if (id(display_select).state == "Weather") {
+          id(main_display).show_page(id(weather));
+        } else if (id(display_select).state == "Music") {
+          id(main_display).show_page(id(music_page));
+        }
+
+        return true;
+      } else {
+        id(main_display).show_page(id(blank_page));
+        return false;
+      }
+
+text_sensor:
+  - platform: homeassistant
+    id: weather_conditions
+    entity_id: weather.forecast_home
+    # attribute: state
+    name: "Weather"
+    internal: True
+  - platform: homeassistant
+    id: spotify_state_raw
+    entity_id: media_player.spotify_james
+    name: "Spotify State"
+    internal: True
+  - platform: homeassistant
+    id: spotify_title
+    entity_id: media_player.spotify_james
+    attribute: media_title
+    name: "Track Title"
+    internal: True
+  - platform: homeassistant
+    id: spotify_artist
+    entity_id: media_player.spotify_james
+    attribute: media_artist
+    name: "Artist Name"
+    internal: True
+  - platform: homeassistant
+    id: spotify_album
+    entity_id: media_player.spotify_james
+    attribute: media_album_name
+    name: "Album Name"
+    internal: True
+
+select:
+  - platform: template
+    name: "Smart Display State"
+    id: display_select
+    options:
+      - "Clock"
+      - "Weather"
+      - "Music"
+    initial_option: "Clock"
+    optimistic: true
+    on_value:
+      then:
+        - display.page.show: !lambda |-
+            if(id(display_select).state == "Clock") {
+              return id(clock_time);
+            } else if (id(display_select).state == "Weather") {
+              return id(weather);
+            } else if (id(display_select).state == "Music") {
+              return id(music_page);
+            }
+        - delay: 3s
+        - component.update: main_display
+
+switch:
+  - platform: template
+    id: display_on_switch
+    name: "Smart Display"
+    icon: "mdi:television-classic"
+    optimistic: True
+
+spi:
+  clk_pin: GPIO18
+  mosi_pin: GPIO23
+  interface: hardware
+
+display:
+  - platform: ssd1306_spi
+    model: SSD1306_128X64
+    cs_pin: GPIO15 # Pin 29
+    dc_pin: GPIO2 # Pin 9
+    reset_pin: GPIO4 # Pin 10
+    id: main_display
+    contrast: 1%
+    pages:
+      - id: clock_time
+        lambda: !lambda |-
+          const char *days[] = {
+            "Invalid",
+            "Sun",
+            "Mon",
+            "Tues",
+            "Wed",
+            "Thurs",
+            "Fri",
+            "Sat"
+          };
+
+          const char *months[] = {
+            "Invalid",
+            "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+            "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+          };
+
+          auto now = id(ha_time).now();
+
+          int hour = now.hour;
+          int minute = now.minute;
+
+          // AM:PM circle indicator
+          if (hour >= 12) it.filled_circle(123, 4, 2);
+
+          if (hour == 0) hour = 12;
+          else if (hour > 12) hour -= 12;
+
+          // Time
+          it.printf(it.get_width() / 2, 24, id(Courier_Prime), TextAlign::CENTER, "%d:%02d", hour, minute);
+
+          //Calendar
+          it.printf(it.get_width() / 2, 48, id(Courier_Prime_11), TextAlign::CENTER, "%s %d %s", days[now.day_of_week], now.day_of_month, months[now.month]);
+      - id: weather
+        lambda: !lambda |-
+          // weather_cloud_sunny
+
+          // Title
+          it.printf(it.get_width() / 2, 20, id(Courier_Prime), TextAlign::CENTER, "%.1f°C", id(outdoor_temp).state);
+
+          // Album
+          it.printf(it.get_width() / 2, 42, id(Courier_Prime_16), TextAlign::CENTER, "%s", id(weather_conditions).state.c_str());
+      - id: music_page
+        lambda: !lambda |-
+          // Title
+          //it.printf(it.get_width() / 2, 20, id(Courier_Prime_14), TextAlign::LEFT, "%s", id(spotify_title).state.c_str());
+          it.printf(4, 15, id(Roboto), "%s", id(spotify_title).state.c_str());
+
+
+          // Album
+          //it.printf(it.get_width() / 2, 30, id(Courier_Prime_8), TextAlign::CENTER, "%s", id(spotify_album).state.c_str());
+
+          // Artist
+          //it.printf(it.get_width() / 2, 34, id(Courier_Prime_8), TextAlign::LEFT, "%s", id(spotify_artist).state.c_str());
+          //it.printf(it.get_width() / 2, 38, id(Courier_Prime_8), TextAlign::CENTER, "%s", id(spotify_artist).state.c_str());
+          it.printf(4, 30, id(Roboto_9), "%s", id(spotify_artist).state.c_str());
+
+          int duration = id(track_duration).state;
+          int pos = id(track_pos).state + id(duration_offset).state;
+
+          float percentComplete = (float)pos / (float)duration;
+
+          int mins = duration / 60;
+          int sec = duration % 60;
+
+          int remaining = duration - pos;
+
+          int mins_remain = remaining / 60;
+          int sec_remain = remaining % 60;
+
+           // Layer 3
+          it.rectangle(5, 48, 119, 5);
+
+          float filledPixels = 119 * percentComplete;
+
+          // Layer 4
+          it.filled_rectangle(5, 48, filledPixels, 5);
+
+          // Layer 5
+          it.printf(105, 54, id(Courier_Prime_6), "-%d:%02d", mins_remain, sec_remain);
+
+          // Layer 6
+          it.printf(4, 54, id(Courier_Prime_6), "%d:%02d", mins, sec);
+      - id: blank_page
+        lambda: !lambda |-
+          return;
