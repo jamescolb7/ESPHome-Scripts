@@ -20,8 +20,8 @@ ota:
     password: ""
 
 wifi:
-  ssid: "Andromeda-IoT"
-  password: "0V3pqv1fl0Mr"
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
 
   # Enable fallback hotspot (captive portal) in case wifi connection fails
   ap:
